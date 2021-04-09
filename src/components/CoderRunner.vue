@@ -1,13 +1,10 @@
 <template>
   <div class="code-container">
-    <div>
-      <h1>Categories</h1>
-      <div v-for="(codeItems, key, idx) in groupedCodeItems" :key="idx">
-        <a :href="'#section_' + key"> {{ key }}</a><br />
-      </div>
-    </div>
-    <div class="code-group" v-for="(codeItems, key, idx) in groupedCodeItems" :key="idx">
-      <h2 :id="'section_' + key">{{ key }}</h2>
+    <div
+      class="code-group"
+      v-for="(codeItems, key, idx) in groupedCodeItems"
+      :key="idx"
+    >
       <div
         v-for="(codeItem, idx) in codeItems"
         :key="idx"
@@ -38,14 +35,20 @@
 </template>
 
 <script>
-import codeItems from "../assets/code.js";
+// import codeItems from "../assets/code.js";
 import _ from "lodash";
 
 export default {
   name: "CodeRunner",
+  props: {
+    codeBase: {
+      type: String,
+      required: true,
+    },
+  },
   data: function () {
     return {
-      codeItems: codeItems,
+      codeItems: [],
       results: {},
     };
   },
@@ -82,8 +85,22 @@ export default {
 
       console.log = origLog;
     },
+    async loadCodeBase(codeBase) {
+      try {
+        this.codeItems = (await import(`../assets/${codeBase}`)).default;
+      } catch (e) {
+        this.codeItems = [];
+      }
+    },
   },
-  mounted() {},
+  watch: {
+    $route(to) {
+      this.loadCodeBase(to.params.codeBase);
+    },
+  },
+  mounted() {
+    this.loadCodeBase(this.codeBase);
+  },
 };
 </script>
 
@@ -117,5 +134,4 @@ export default {
   margin-bottom: 0px;
   text-decoration: underline;
 }
-
 </style>
