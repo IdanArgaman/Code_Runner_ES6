@@ -18,6 +18,12 @@ export default [{
                         return acc + curr;
                     }, 0);
                 }
+                first() {
+                    return this[0];
+                }
+                last() {
+                    return this[this.length - 1];
+                }
             }
 
             var z = MyCoolArray.of(3);
@@ -33,6 +39,12 @@ export default [{
             console.log(MyCoolArray.of([2, 3]) instanceof Array); // true
             console.log(MyCoolArray.from(x) instanceof MyCoolArray); // true
             console.log(MyCoolArray.of([2, 3]) instanceof MyCoolArray); // true 
+
+            var a = new MyCoolArray(1, 2, 3);
+            console.log(a.length); // 3
+            console.log(a); // [1,2,3]
+            console.log(a.first()); // 1
+            console.log(a.last()); // 3
         },
     },
     {
