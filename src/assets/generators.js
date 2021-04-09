@@ -17,7 +17,7 @@ export default [{
                     yield; // Iterator returns and paused
 
                     var z = x + y;
-                    return z;
+                    return z; // The return value is the iterable completion value!
                 }
 
                 // ⚠️ The generator doesn't run yet!!!
@@ -25,7 +25,10 @@ export default [{
 
                 // Now it is running. The iterator's body executes until the yield keyword.
                 console.log(it.next()); // {value: undefined, done: false} -> Since we don't return anything in the yield, we get undefine as value!
-                console.log(it.next()); // {value: 30, done: true} -> We get the value returned by the generator, z! We also get "done" as the generartor's status
+
+                // {value: 30, done: true} -> We get the completion value which is the value returned by 
+                // the generator. We also get "done" as the generartor's status. 
+                console.log(it.next());
             })();
         },
     },
@@ -99,9 +102,132 @@ export default [{
         title: "Yield delegation",
         description: "using the yield * to delegate to another iterable",
         code: () => {
+            // The yield* expression is used to delegate to another generator OR iterable object.
             // Look at: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/yield*
 
-            // Besides generator objects, yield* can also yield other kinds of iterables
+            (() => {
+                function* foo() {
+                    // Because an array is an iterable object, we can delege the yield 
+                    // directly to it.
+                    yield*[1, 2, 3];
+                    return 5000;
+                }
+
+                /* The above is the same as:
+
+                    function *foo() {
+                        yield 1;
+                        yield 2;
+                        yield 3;
+                    }
+
+                */
+
+                var it = foo();
+
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+            })();
+
+            (() => {
+                function* foo() {
+                    yield 1;
+                    yield 2;
+                    yield 3;
+                    return 4;
+                }
+
+                /* While the 1, 2, and 3 values would be yield`ed out of `*foo() and then out of
+                 *bar(), the 4 value returned from *foo() is the completion value of the yield
+                 *foo() expression, which then gets assigned to x. */
+
+                function* bar() {
+                    var x = yield* foo();
+                    console.log(x); // 4
+                }
+
+                var it = bar();
+
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+                console.log(JSON.stringify(it.next()));
+            })();
+        }
+    },
+    {
+        categoryId: CodeTypesEnum.ADVANCED,
+        title: "Recursive yield",
+        description: "An advanced yield usage showing recursion & delegation",
+        code: () => {
+            function* foo(x) {
+                if (x < 3) {
+                    x = yield* foo(x + 1);
+                }
+
+                return x * 2;
+            }
+
+
+            var it = foo(1);
+
+            // Start the generator
+            // It is important to understand the calling "next" only once,
+            // completes the generator, there is a single yield in its body
+            // so even the recursive pattern, calling next once completes it!
+
+            // The recursion values are 6, 12 and finally 24!
+            console.log(JSON.stringify(it.next()));
+        }
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "Generator error handling",
+        description: "",
+        code: () => {
+            function* foo() {
+                try {
+                    // yield -> stop here, get this value, I'm expecting to 
+                    // evaluate the value passed to me by the next call to 'next'
+                    yield 1;
+                } catch (err) {
+                    console.log("The excpetion error is: " + err);
+                }
+                yield 2;
+                throw "Hello!";
+            }
+
+            var it = foo();
+
+            // next -> starts the iterator until yield expression is found in the generator
+            // when yield is encoutered, get its value
+
+            console.log(JSON.stringify(it.next())); // { value: 1, done: false }
+
+            try {
+                // The  throw () method resumes the execution of a generator by throwing an
+                // error into it and returns an object with two properties done and value.
+
+                // We feed the 'yield 1' expression at *foo with an exception.
+                // When this exception expression that replaces 'yield 1' evaluates
+                // it will be handled by a catch block if exists.
+
+                // Note that after the exception gets handled the generator body continues
+                // and stops at the next yield.
+
+                console.log(JSON.stringify(it.throw("Hi!"))); // Hi! // { value: 2, done: false }
+
+                // Fill 'yield 2' expression with nothing and continue the iterator
+                // which throws an exception that isn't handled by its body
+                console.log(JSON.stringify(it.next()));
+
+                // Because the iterator throws an exception
+                console.log("never gets here");
+            } catch (err) {
+                console.log(err); // Hello - recieved from the iterator!
+            }
         }
     }
 ];
