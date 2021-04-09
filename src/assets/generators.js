@@ -229,5 +229,63 @@ export default [{
                 console.log(err); // Hello - recieved from the iterator!
             }
         }
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "More Generator Error Handling",
+        description: "Error handling when delegating",
+        code: () => {
+            function* foo() {
+                try {
+                    yield 1;
+                } catch (err) {
+                    console.log("foo exception handler: " + err);
+                }
+                yield 2;
+                throw "foo: e2";
+            }
+
+            function* bar() {
+                try {
+
+                    /* yield * -> passes the iterator from the generator it is called on to another generator
+                       and WAITS for that generator to finish (by the delegating more next calls to it). 
+                       Only after the delegated generator finishes, the yield * is free and its generator 
+                       (*bar) continues.
+                    */
+                    yield* foo();
+                    console.log("never gets here");
+                } catch (err) {
+                    console.log("Bar exception handler: " + err);
+                }
+
+                return 5000;
+            }
+
+            var it = bar();
+
+            try {
+                // Stops at 'yield 1' at foo and returns 1
+                console.log(JSON.stringify(it.next())); // { value: 1, done: false }
+
+                // Feeds the 'yield 1' at foo with exception, that is handled by foo,
+                // the continue and stops at 'yield 2'
+                console.log(JSON.stringify(it.throw("e1"))); // e1
+                // { value: 2, done: false }
+
+                // Feeds 'yield 2' with nothing and contiune until to foo's end
+                // which throws an exception that is handled by bar. After handling
+                // the exception, bar finish its execution with a return value.
+                console.log(JSON.stringify(it.next())); // foo: e2
+                // { value: 5000, done: true }
+
+            } catch (err) {
+                console.log("never gets here");
+            }
+
+            // Calling next on bar after it finished doesn't return its last value (5000),
+            // we only get {"done":true}.
+            console.log(JSON.stringify(it.next()));
+        }
     }
 ];
