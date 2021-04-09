@@ -1,5 +1,6 @@
 <template>
   <div id="app">
+    <header class="page-header">Categries</header>
     <nav>
       <router-link
         v-for="file in files"
@@ -35,6 +36,12 @@ export default {
 #app {
 }
 
+.page-header {
+  font-size: 32px;
+  font-weight: bold;
+  padding-bottom: 15px;
+}
+
 nav a:link,
 nav a:visited {
   background-color: DarkSalmon;
@@ -52,7 +59,8 @@ nav a:visited {
   border-left: 1px solid white;
 }
 nav a:hover,
-nav a:active {
+nav a:active,
+nav a.router-link-active {
   background-color: DarkRed;
 }
 </style>
