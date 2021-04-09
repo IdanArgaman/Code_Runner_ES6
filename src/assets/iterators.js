@@ -1,7 +1,8 @@
 /* eslint-disable */
 
 const CodeTypesEnum = {
-    BASIC: "BASIC"
+    BASIC: "BASIC",
+    ADVANCED: "ADVANCED"
 }
 
 export default [{
@@ -51,10 +52,30 @@ export default [{
             console.log(JSON.stringify(it3.next())); // { value: [ "foo", 42 ], done: false }
             console.log(JSON.stringify(it4.next())); // { value: [ "foo", 42 ], done: false }
 
+            // More examples
+
+            const a = [1, 2, 3, 4, 5];
+
+            // Getting the iterator for the array
+            var it5 = a[Symbol.iterator]();
+
+            var [x, y] = it5; // take just the first two elements from `it` -> destructing  and iterator
+
+            var [z, ...w] = it5; // take the third, then the rest all at once -> continute the destruction from third element
+
+            // is `it` is fully exhausted? Yep.
+
+            it5.next(); // { value: undefined, done: true }
+
+            console.log(x); // 1
+            console.log(y); // 2
+            console.log(z); // 3
+            console.log(w);
+
         }
     },
     {
-        "categoryId": CodeTypesEnum.BASIC,
+        "categoryId": CodeTypesEnum.ADVANCED,
         "title": "Implementing our own iterator",
         "description": "We can easily implement an interator by defining a Symbol.iterator function in it",
         "code": () => {
@@ -137,5 +158,70 @@ export default [{
         },
 
     },
+    {
+        categoryId: CodeTypesEnum.ADVANCED,
+        title: "Extending number to be an iterable",
+        description: "Using define property to define Symbol.iterator on number",
+        code: () => {
+            if (!Number.prototype[Symbol.iterator]) {
 
+                Object.defineProperty(
+                    Number.prototype,
+                    Symbol.iterator, { // We name the new property - Sumbol.iterator
+                        writable: true,
+                        configurable: true,
+                        enumerable: false,
+                        value: function () { // The property value is an object implementing the iterator protocol
+                            // "this" is number! The + sign extracts its value forcin Number.valueOf to execute
+                            var i, inc, done = false,
+                                top = +this;
+
+                            // iterate positively or negatively?
+                            inc = 1 * (top < 0 ? -1 : 1);
+
+                            return {
+                                // make the iterator itself an iterable!
+                                [Symbol.iterator]() {
+                                    return this;
+                                },
+                                next() {
+
+                                    if (!done) {
+                                        // initial iteration always 0
+                                        if (i == null) {
+                                            i = 0;
+                                        }
+                                        // iterating positively
+                                        else if (top >= 0) {
+                                            i = Math.min(top, i + inc);
+                                        }
+                                        // iterating negatively
+                                        else {
+                                            i = Math.max(top, i + inc);
+                                        }
+                                        // done after this iteration?
+                                        if (i == top) done = true;
+                                        return {
+                                            value: i,
+                                            done: false
+                                        };
+                                    } else {
+                                        return {
+                                            done: true
+                                        };
+                                    }
+                                }
+                            };
+                        }
+                    }
+                );
+            }
+
+            for (let i of 3) {
+                console.log(i);
+            }
+            // 0 -1 -2 -3
+            console.log([...-3]);
+        }
+    }
 ];
