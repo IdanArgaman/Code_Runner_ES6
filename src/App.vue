@@ -33,9 +33,6 @@ export default {
 </script>
 
 <style>
-#app {
-}
-
 .page-header {
   font-size: 32px;
   font-weight: bold;
