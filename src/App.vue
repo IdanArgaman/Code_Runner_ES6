@@ -40,10 +40,17 @@ export default {
   font-size: 32px;
   font-weight: bold;
   padding-bottom: 15px;
+  justify-content: space-evenly;
+}
+nav {
+  display: flex;
+  display: block;
 }
 
 nav a:link,
 nav a:visited {
+  width: 100px;
+  white-space: nowrap;
   background-color: DarkSalmon;
   border: none;
   color: #ffffff;
