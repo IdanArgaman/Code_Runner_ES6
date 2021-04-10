@@ -81,4 +81,16 @@ export default [{
                 func(); // So we can call 'func' that uses 'myVar'
             }
         }
-    ];
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "let doesn't get stored in window",
+        description: "",
+        code: () => {
+            var r1 = 'global';
+            let r2 = 'global';
+            console.log(this.r1); // "global"    
+            console.log(this.r2); //  undefined
+        }
+    }
+];
