@@ -44,12 +44,17 @@ export default {
 }
 nav {
   display: flex;
+  flex-wrap: wrap;
+  width: 75%;
+}
+
+nav a {
+  flex-basis: 150px;
   display: block;
 }
 
 nav a:link,
 nav a:visited {
-  width: 100px;
   white-space: nowrap;
   background-color: DarkSalmon;
   border: none;
@@ -64,6 +69,7 @@ nav a:visited {
   cursor: pointer;
   display: inline-block;
   border-left: 1px solid white;
+  border-top: 1px solid white;
 }
 nav a:hover,
 nav a:active,
