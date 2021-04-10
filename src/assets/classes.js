@@ -75,5 +75,19 @@ export default [{
             o[prefix + "bar"]();
             o[prefix + "test"]();
         }
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "Classes declarations aren't hoisted!",
+        description: "",
+        code: () => {
+            // Class declarations are not activated early, because of lines like this, that
+            // would fail if classes where hoisted!
+
+            const identity = x => x;
+            class MyClass extends identity(Object) {}
+
+            new MyClass();
+        }
     }
 ]
