@@ -1,5 +1,4 @@
 /* eslint-disable */
-
 const CodeTypesEnum = {
     BASIC: "BASIC"
 }
@@ -71,6 +70,31 @@ export default [{
             console.log([1, 2, 3, 4, 5].copyWithin(3, 0, 1)); // [1,2,3,1,5]
             console.log([1, 2, 3, 4, 5].copyWithin(0, -2)); // [4,5,3,4,5]
             console.log([1, 2, 3, 4, 5].copyWithin(0, -2, -1)); // [4,2,3,4,5]
+        }
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "More 'of' examples",
+        description: "",
+        code: () => {
+            var o = {};
+
+            for (o.a of [1, 2, 3]) {
+                console.log(o.a);
+            }
+
+            // Using destructor over an array of objects
+            for ({
+                    x: o.a
+                } of [{
+                    x: 1
+                }, {
+                    x: 2
+                }, {
+                    x: 3
+                }]) {
+                console.log(o.a);
+            }
         }
     }
 ];

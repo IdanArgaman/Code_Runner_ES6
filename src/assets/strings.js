@@ -1,5 +1,6 @@
 const CodeTypesEnum = {
-    BASIC: "BASIC"
+    BASIC: "BASIC",
+    ADVANCED: "ADVANCED"
 }
 
 export default [{
@@ -25,7 +26,7 @@ export default [{
         }
     },
     {
-        categoryId: 'Snippet',
+        categoryId: CodeTypesEnum.ADVANCED,
         title: "",
         description: "",
         code: () => {
