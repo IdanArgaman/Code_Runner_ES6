@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <header class="page-header">Categries</header>
+    <header class="page-header">Categories</header>
     <nav>
       <router-link
         v-for="file in files"
