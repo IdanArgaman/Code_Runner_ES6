@@ -60,5 +60,25 @@ export default [{
 
             funcs[3](); // 5
         }
-    }
-];
+    },
+    {
+        categoryId: CodeTypesEnum.BASIC,
+        title: "Another TDZ example",
+        description: "Proves that TDZ is truely temporal",
+        code: () => {
+            // TDZ is truley temporal!
+
+            // entering scope of `myVar`, TDZ starts!
+            if (true) {
+                const func = () => {
+                    console.log(myVar); // executed later
+                };
+
+                // We are within the TDZ! Accessing 'myVar' now will cause 'ReferenceError'
+
+                let myVar = 3; // Now TDZ ends!
+
+                func(); // So we can call 'func' that uses 'myVar'
+            }
+        }
+    ];
