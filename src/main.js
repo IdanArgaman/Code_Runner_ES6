@@ -14,9 +14,12 @@ import CodeRunner from "./components/CoderRunner.vue";
 Vue.use(VueRouter);
 
 const router = new VueRouter({
-	routes: [
-		{ name: "code", path: '/code/:codeBase', component: CodeRunner, props: true },
-	]
+	routes: [{
+		name: "code",
+		path: '/code/:codeBase',
+		component: CodeRunner,
+		props: true
+	}]
 });
 
 Vue.use(VueHighlightJS, {
