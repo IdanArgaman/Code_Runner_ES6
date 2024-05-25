@@ -121,47 +121,45 @@ export default [
     },
   },
   {
-      categoryId: 'Snippet',
-      title: "",
-      description: "",
-      code: () => {
-        /*
+    categoryId: "Snippet",
+    title: "",
+    description: "",
+    code: () => {
+      /*
         Most Promise-based functions are executed as follows:
             ❗ Their execution starts right away, synchronously (in the current task).
               But the Promise they return is guaranteed to be settled 
               asynchronously (in a later task) – if ever.
         */
-        
-        function asyncFunc() {
-          // 1
-          console.log('asyncFunc');
-          return new Promise((resolve) => {
-              // 2 - The promise body execute in the current task!
-              console.log('new Promise()');
-              resolve();
-            });
-        }
 
-        // 3
-        console.log('START');
-
-        asyncFunc()
-          .then(() => {
-            // 5
-            console.log('.then()'); // (A)
-          });
-
-        // 4
-        console.log('END');
-        
-        // Output:
-        // 'START'
-        // 'asyncFunc'
-        // 'new Promise()'
-        // 'END'
-        // '.then()'
-        
+      function asyncFunc() {
+        // 1
+        console.log("asyncFunc");
+        return new Promise((resolve) => {
+          // 2 - The promise body execute in the current task!
+          console.log("new Promise()");
+          resolve();
+        });
       }
+
+      // 3
+      console.log("START");
+
+      asyncFunc().then(() => {
+        // 5
+        console.log(".then()"); // (A)
+      });
+
+      // 4
+      console.log("END");
+
+      // Output:
+      // 'START'
+      // 'asyncFunc'
+      // 'new Promise()'
+      // 'END'
+      // '.then()'
+    },
   },
   {
     categoryId: "Snippet",
@@ -287,7 +285,8 @@ export default [
             });
           }, 5000);
 
-          // We listen to the cancel token!
+          // We listen to the cancel token, which is a promise that when resolved
+          // we stop the BG operation (clear timeout in this case) and reject the promise!
           cancelToken.then(() => {
             clearTimeout(timeId);
             reject("Cancelled");
@@ -299,6 +298,7 @@ export default [
 
       someLongProcess(
         "http://localhost:3000",
+        // A cancel token is a promise object we can resolve to trigger cancellation
         new Promise((r) => {
           resolve = r;
         })
@@ -311,7 +311,7 @@ export default [
         });
 
       setTimeout(() => {
-        resolve();
+        resolve(); // Trigger the cancel token!
       }, 2000);
     },
   },
@@ -320,31 +320,162 @@ export default [
     title: "Another implementation of generic cancellable promise",
     description: "",
     code: () => {
-      const spec = (fn, cancelPrm) => {
+      const convertToCancellablePromise = (fn, cancelToken) => {
         return new Promise((resolve, reject) => {
-          const registerCancelEvent = (cancelEventHandler) => {
-            cancelPrm.then(cancelEventHandler);
+          const setOnCancelEventHandler = (cancelEventHandler) => {
+            cancelToken.then(cancelEventHandler);
           };
 
-          fn(resolve, reject, registerCancelEvent);
+          fn(resolve, reject, setOnCancelEventHandler);
         });
       };
 
-      const someAsync = (url, cancel) =>
-        spec((resolve, reject, registerCancelEvent) => {
-          const timeId = setTimeout(() => {
-            resolve("Some Async Resolved!");
-          }, 5000);
+      const someAsync = (url, cancel /* cancel token */) => {
+        // Spec accepts a function that will be equipped with
+        // resolve, reject an a mechanism to listen to cancel.
+        // Spec returns a promise that is fullfilled or rejectd by fn!
+        // The second param to spec is a cancel token!
 
-          registerCancelEvent(() => {
-            clearTimeout(timeId);
-            reject("Some Async Cancled!");
-          });
-        }, cancel);
+        return convertToCancellablePromise(
+          /* fn */ (resolve, reject, setOnCancelEventHandler) => {
+            const timeId = setTimeout(() => {
+              resolve("Some Async Resolved!"); // Resolve the promise returned by spec!
+            }, 5000);
 
-      someAsync(null, new Promise((resolve) => setTimeout(resolve, 6000)))
+            setOnCancelEventHandler(
+              /* Triggered on cancel */ () => {
+                clearTimeout(timeId);
+                reject("Some Async Cancled!"); // Upon cancel, reject the promise returned by spec!
+              }
+            );
+          },
+          cancel
+        );
+      };
+
+      someAsync(
+        null,
+        /* cancel token */ new Promise((resolve) => setTimeout(resolve, 6000))
+      )
         .then((x) => console.log(x))
         .catch((x) => console.log(x));
+    },
+  },
+  {
+    categoryId: "Snippet",
+    title: "Finally in Promises",
+    description: "",
+    code: () => {
+      // We can also use .finally() before both .then() and .catch().
+      // Then what we do in the .finally() callback is always executed
+      // before the other two callbacks!
+
+      // We can use finally everywhere in the chain, it is always gets invoked!
+      Promise.resolve(123)
+        .finally((n) => {
+          // Finally ignores its input - n is undefined
+          console.log(n);
+          console.log("F1");
+          return 456; // The return value is ignored!
+        })
+        .then((result) => {
+          // result is 123
+          console.log(result);
+          return result; // The return value is ignored!
+        })
+        .finally((n) => {
+          // Finally ignores its input - n is undefined
+          console.log(n);
+          console.log("F3");
+          return "XXX"; // The return value is ignored!
+        })
+        .then((result) => {
+          // result is 123 which is the last value from then
+          console.log(result);
+        })
+        .finally(() => {
+          // If the .finally() callback throws an exception, the Promise returned by .finally() is rejected
+          throw "error (finally)";
+        })
+        .then(() => {
+          console.log("Hi");
+        })
+        .catch(() => {
+          console.log("error (finally)");
+        });
+
+      Promise.reject("rejected")
+        .finally(() => {
+          // Finally is always called even if the promise is already settled
+          console.log("finally");
+        })
+        .then((result) => {
+          console.log("then " + result);
+        })
+        .catch((error) => {
+          console.log("catch " + error);
+        });
+    },
+  },
+  {
+    categoryId: "Snippet",
+    title: "Promise.any",
+    description: "",
+    code: () => {
+      /*
+      Promise.any() returns a Promise p. How it is settled, depends on the parameter promises 
+      (which refers to an iterable over Promises):
+        - If and when the first Promise is fulfilled, p is resolved with that Promise.
+        - If ***ALL*** Promises are rejected, p is rejected with an instance of AggregateError 
+          that contains all rejection values.
+      */
+
+      const promises = [
+        Promise.reject("ERROR A"),
+        Promise.reject("ERROR B"),
+        Promise.resolve("result"),
+      ];
+
+      Promise.any(promises).then((result) => console.log(result, "result"));
+
+      const promises2 = [
+        Promise.reject("ERROR A"),
+        Promise.reject("ERROR B"),
+        Promise.reject("ERROR C"),
+      ];
+
+      Promise.any(promises2).catch((aggregateError) =>
+        console.log(aggregateError.errors, ["ERROR A", "ERROR B", "ERROR C"])
+      );
+
+
+      /* NOTE:
+
+      Promise.any() and Promise.race() are also related, but interested in different things:
+
+        Promise.race() is interested in settlements. The Promise which is settled first, “wins”.
+        In other words: We want to know about the asynchronous computation that terminates first.
+
+        Promise.any() is interested in fulfillments. The Promise which is fulfilled first, “wins”. 
+        In other words: We want to know about the asynchronous computation that succeeds first.
+      */
+    },
+  },
+  {
+    categoryId: "Snippet",
+    title: "Promise.allSettled",
+    description: "",
+    code: () => {
+      // Resolved once all promises are settled
+      Promise.allSettled([
+        Promise.resolve('a'),
+        Promise.reject('b'),
+      ])
+      // Note the data structure difference between rejected and settled promise
+      .then(arr => console.log(arr, [
+        { status: 'fulfilled', value:  'a' },
+        { status: 'rejected',  reason: 'b' },
+      ]));
     },
   },
 ];
