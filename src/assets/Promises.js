@@ -121,6 +121,119 @@ export default [
     },
   },
   {
+    categoryId: CodeTypesEnum.BASIC,
+    title: "Self implemented Promise helpers",
+    description: "A simple version of Promise.all, Promise.any, Promise.race, and Promise.allSettled.",
+    code: () => {
+      /*
+        These are simplified versions of the native Promise helpers.
+        The original Promise.all / Promise.any / Promise.race / Promise.allSettled
+        already handle edge cases and built-in behavior for you.
+      */
+
+      function myPromiseAll(promises) {
+        return new Promise((resolve, reject) => {
+          const items = Array.from(promises);
+          const results = [];
+          let remaining = items.length;
+
+          if (remaining === 0) {
+            resolve([]);
+            return;
+          }
+
+          items.forEach((promise, index) => {
+            Promise.resolve(promise)
+              .then((value) => {
+                results[index] = value;
+              })
+              .catch(reject)
+              .finally(() => {
+                remaining -= 1;
+                if (remaining === 0) {
+                  resolve(results);
+                }
+              });
+          });
+        });
+      }
+
+      function myPromiseAny(promises) {
+        return new Promise((resolve, reject) => {
+          const items = Array.from(promises);
+          const reasons = [];
+          let rejectedCount = 0;
+
+          if (items.length === 0) {
+            reject(new AggregateError([], "All promises were rejected"));
+            return;
+          }
+
+          items.forEach((promise, index) => {
+            Promise.resolve(promise)
+              .then(resolve)
+              .catch((reason) => {
+                reasons[index] = reason;
+                rejectedCount += 1;
+
+                if (rejectedCount === items.length) {
+                  reject(new AggregateError(reasons, "All promises were rejected"));
+                }
+              });
+          });
+        });
+      }
+
+      function myPromiseRace(promises) {
+        return new Promise((resolve, reject) => {
+          const items = Array.from(promises);
+
+          items.forEach((promise) => {
+            Promise.resolve(promise).then(resolve, reject);
+          });
+        });
+      }
+
+      function myPromiseAllSettled(promises) {
+        return new Promise((resolve) => {
+          const items = Array.from(promises);
+          const results = [];
+          let remaining = items.length;
+
+          if (remaining === 0) {
+            resolve([]);
+            return;
+          }
+
+          items.forEach((promise, index) => {
+            Promise.resolve(promise)
+              .then((value) => {
+                results[index] = { status: "fulfilled", value };
+              })
+              .catch((reason) => {
+                results[index] = { status: "rejected", reason };
+              })
+              .finally(() => {
+                remaining -= 1;
+                if (remaining === 0) {
+                  resolve(results);
+                }
+              });
+          });
+        });
+      }
+
+      const fast = new Promise((resolve) => setTimeout(resolve, 100, "fast"));
+      const slow = new Promise((resolve) => setTimeout(resolve, 500, "slow"));
+      const fail = Promise.reject("boom");
+
+      myPromiseAll([fast, slow]).then((value) => console.log("all:", value));
+      myPromiseAny([fail, fast]).then((value) => console.log("any:", value));
+      myPromiseRace([slow, fast]).then((value) => console.log("race:", value));
+      myPromiseAllSettled([fast, fail]).then((value) => console.log("allSettled:", value));
+    },
+  },
+  {
     categoryId: "Snippet",
     title: "",
     description: "",
