@@ -303,6 +303,8 @@ export default [
           // Nothing is logged here due to the error above:
           (d) => console.log(`d: ${d}`),
           // Now we handle the error (rejection reason)
+          // This handles error on the promise returned by the previous .then() call:
+          // It doesn't handle errors the comes from the then's body itself, only the promise returned by the then() call.
           (e) => console.log("Hi " + e)
         ) // [Error: foo]
         // With the previous exception handled, we can continue:
@@ -320,10 +322,10 @@ export default [
         .then((g) => console.log(`g: ${g}`)) // Skipped
         .then((g) => console.log(`g: ${g}`)) // Skipped
         .catch((h) => {
-          console.log("Hi again: " + h);
+          console.log("Hi again: " + h); // [Error: bar]
           return "From catch!";
-        }) // [Error: bar]
-        .then((e) => console.log('I"m here! ' + e));
+        })
+        .then((v) => console.log('I"m here! ' + v));
     },
   },
   {
@@ -332,7 +334,7 @@ export default [
     description: "",
     code: () => {
       // Errors thrown inside asynchronous functions will act like uncaught errors
-      var p2 = new Promise(function(resolve, reject) {
+      var p2 = new Promise(function() {
         setTimeout(function() {
           throw new Error("Uncaught Exception!");
         }, 1000);
@@ -343,7 +345,7 @@ export default [
       });
 
       // Errors thrown after resolve is called will be silenced
-      var p3 = new Promise(function(resolve, reject) {
+      var p3 = new Promise(function(resolve) {
         resolve();
         throw new Error("Silenced Exception!");
       });
