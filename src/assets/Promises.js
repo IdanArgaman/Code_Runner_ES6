@@ -532,6 +532,181 @@ export default [
   },
   {
     categoryId: "Snippet",
+    title: "then/catch/finally - the full mental model",
+    description:
+      "A deep dive into how then/catch/finally pass values along the chain, how thrown errors become rejections, and what happens when a handler returns a promise.",
+    code: () => {
+      /*
+        THE CORE RULE:
+
+        .then(onFulfilled, onRejected) is the only "primitive". Both
+        .catch(fn) and .finally(fn) are built on top of it:
+
+            .catch(fn)   === .then(undefined, fn)
+            .finally(fn) is special-cased (see below), but conceptually
+                         it is close to .then(fn, fn) that forwards its input.
+
+        Every .then/.catch/.finally call returns a BRAND NEW promise.
+        That new promise's state depends ONLY on what the handler that
+        actually ran did:
+
+          1. Handler returns a plain value  -> new promise FULFILLS with that value.
+          2. Handler returns nothing (undefined) -> new promise FULFILLS with undefined.
+          3. Handler throws                  -> new promise REJECTS with the thrown value.
+          4. Handler returns a promise/thenable P -> new promise "locks on" to P;
+             it fulfills/rejects with whatever P eventually does (the chain "flattens").
+          5. No matching handler was provided (e.g. a .then(onFulfilled) with no
+             onRejected, sitting on a rejected promise) -> the state simply
+             passes through UNCHANGED to the next link, skipping every .then()
+             until a .catch() (or a .then's 2nd arg) is found.
+      */
+
+      // --- 1) .then's success value flows to the next .then's success value ---
+      Promise.resolve(1)
+        .then((v) => v + 1) // 2
+        .then((v) => v + 1) // 3
+        .then((v) => console.log("1) chained then:", v)); // 3
+
+      // --- 2) Returning nothing = returning undefined ---
+      Promise.resolve("ignored")
+        .then((v) => {
+          console.log("2) input was:", v);
+          // no return here!
+        })
+        .then((v) => console.log("2) next then got:", v)); // undefined
+
+      // --- 3) A throw inside .then() rejects the NEXT promise, not the current one ---
+      // The .then() call itself never throws synchronously - it always returns
+      // a promise, and that promise becomes rejected.
+      Promise.resolve()
+        .then(() => {
+          throw new Error("boom in then");
+        })
+        .then(
+          () => console.log("3) this success handler is SKIPPED"),
+          (err) => console.log("3) caught via 2nd then() arg:", err.message)
+        );
+
+      // --- 4) .catch() only fires on rejection, and is skipped entirely on success ---
+      Promise.resolve("ok")
+        .then((v) => v) // fulfilled, so...
+        .catch((err) => console.log("4) never runs:", err)) // ...this is skipped...
+        .then((v) => console.log("4) skips straight through catch to:", v)); // "ok"
+
+      // --- 5) A successful .catch() RECOVERS the chain back to fulfilled! ---
+      // This is the classic gotcha: catch() swallows the error and the chain
+      // continues as if nothing happened, unless you re-throw.
+      Promise.reject("original error")
+        .catch((err) => {
+          console.log("5) recovering from:", err);
+          return "recovered value"; // turns rejection back into fulfillment
+        })
+        .then((v) => console.log("5) then AFTER catch sees:", v)) // "recovered value"
+        .catch((err) => console.log("5) never runs, chain is healthy:", err));
+
+      // --- 6) Throwing INSIDE a .catch() re-rejects the chain with a NEW reason ---
+      Promise.reject("first error")
+        .catch((err) => {
+          console.log("6) handling:", err);
+          throw "second error"; // re-throw (or throw something new)
+        })
+        .catch((err) => console.log("6) caught the re-thrown error:", err));
+
+      // --- 7) then(onFulfilled, onRejected) vs then(fn).catch(fn) ---
+      // If onFulfilled ITSELF throws, the sibling onRejected passed to the
+      // SAME .then() call will NOT catch it - onRejected only guards the
+      // promise .then() was called ON, not errors from onFulfilled.
+      Promise.resolve("value")
+        .then(
+          () => {
+            throw "error thrown from onFulfilled";
+          },
+          (err) => console.log("7) NEVER runs, wrong promise:", err)
+        )
+        .catch((err) =>
+          console.log("7) only a LATER catch sees it:", err)
+        );
+
+      // --- 8) Returning a promise from .then() flattens/adopts its state ---
+      // The outer promise doesn't settle until the returned inner promise does.
+      Promise.resolve()
+        .then(() => {
+          console.log("8) returning an inner promise...");
+          return new Promise((resolve) =>
+            setTimeout(() => resolve("inner resolved after delay"), 50)
+          );
+        })
+        .then((v) => console.log("8) outer then unwraps it:", v));
+
+      // --- 9) Returning a REJECTED promise from .then() is like throwing ---
+      Promise.resolve()
+        .then(() => {
+          return Promise.reject("inner promise rejected");
+        })
+        .then(() => console.log("9) skipped"))
+        .catch((err) => console.log("9) caught adopted rejection:", err));
+
+      // --- 10) finally() NEVER sees the value, and CANNOT change it ---
+      // Its return value is always ignored, UNLESS it throws or returns a
+      // rejected promise - then it overrides the outcome (see #12).
+      Promise.resolve("kept value")
+        .finally((arg) => {
+          console.log("10) finally arg is always undefined:", arg);
+          return "ignored return";
+        })
+        .then((v) => console.log("10) value passes through untouched:", v));
+
+      Promise.reject("kept rejection")
+        .finally(() => "ignored, does not recover!")
+        .catch((err) =>
+          console.log("10b) finally cannot swallow a rejection:", err)
+        );
+
+      // --- 11) finally() always runs, on the success AND the failure path ---
+      const runBoth = (label, p) =>
+        p
+          .finally(() => console.log(`11) finally ran for ${label}`))
+          .then(
+            (v) => console.log(`11) ${label} fulfilled:`, v),
+            (err) => console.log(`11) ${label} rejected:`, err)
+          );
+      runBoth("A", Promise.resolve("A-value"));
+      runBoth("B", Promise.reject("B-reason"));
+
+      // --- 12) If finally()'s callback throws (or returns a rejected promise),
+      // THAT overrides the original outcome - even if the chain was fulfilled! ---
+      Promise.resolve("would have been fine")
+        .finally(() => {
+          throw "error thrown from finally";
+        })
+        .then((v) => console.log("12) skipped:", v))
+        .catch((err) =>
+          console.log("12) finally's throw wins over fulfillment:", err)
+        );
+
+      // --- 13) If finally()'s callback returns a PENDING promise, settling is
+      // delayed until that promise settles (but the eventual value/reason is
+      // still whatever the chain already had, per rule #10/#10b). ---
+      Promise.resolve("delayed but unchanged")
+        .finally(() => new Promise((resolve) => setTimeout(resolve, 30)))
+        .then((v) => console.log("13) delayed, still original value:", v));
+
+      // --- 14) Multiple .then() calls on the SAME promise fan out independently ---
+      // .then() does not "consume" the promise; each call subscribes its own
+      // pair of callbacks and gets its own derived promise.
+      const shared = Promise.resolve("shared value");
+      shared.then((v) => console.log("14) subscriber A:", v));
+      shared.then((v) => console.log("14) subscriber B:", v));
+
+      // --- 15) Order matters only in the sense of chaining, not calling order ---
+      // Handlers always run as microtasks, so ALL synchronous code below runs
+      // before any .then/.catch/.finally callback fires.
+      Promise.resolve().then(() => console.log("15) microtask callback"));
+      console.log("15) synchronous log happens first");
+    },
+  },
+  {
+    categoryId: "Snippet",
     title: "Promise.any",
     description: "",
     code: () => {
