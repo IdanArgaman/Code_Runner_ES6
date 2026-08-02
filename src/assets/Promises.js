@@ -165,7 +165,7 @@ export default [
           let rejectedCount = 0;
 
           if (items.length === 0) {
-            reject(new AggregateError([], "All promises were rejected"));
+            reject(new Error([]));
             return;
           }
 
@@ -177,7 +177,7 @@ export default [
                 rejectedCount += 1;
 
                 if (rejectedCount === items.length) {
-                  reject(new AggregateError(reasons, "All promises were rejected"));
+                  reject(new Error(reasons));
                 }
               });
           });
@@ -766,6 +766,332 @@ export default [
         { status: 'fulfilled', value:  'a' },
         { status: 'rejected',  reason: 'b' },
       ]));
+    },
+  },
+  {
+    categoryId: CodeTypesEnum.BASIC,
+    title: "MyPromise - cloning the native Promise",
+    description:
+      "A from-scratch reimplementation of Promise (states, executor, microtask queue, chaining, the Promises/A+ resolution procedure, catch/finally) to understand how the native one works internally.",
+    code: () => {
+      /*
+        HOW NATIVE PROMISES WORK, IN ONE PARAGRAPH:
+
+        A promise is a state machine with 3 states: pending -> fulfilled or
+        pending -> rejected (one-way, and it can only happen once). It holds
+        a list of {onFulfilled, onRejected} callback pairs registered via
+        .then(). When the promise settles, every registered callback is
+        scheduled to run as a MICROTASK (not immediately, not as a macrotask
+        like setTimeout). Microtasks run after the current synchronous code
+        finishes, but before the event loop picks up the next macrotask
+        (setTimeout, I/O, rendering). That's why .then() callbacks always
+        run "later", even if the promise was already resolved synchronously
+        - this is what makes promises reliably asynchronous.
+
+        Event loop ordering, cheat sheet:
+          synchronous code  >  microtasks (Promise callbacks, queueMicrotask)
+          >  macrotasks (setTimeout, setInterval, I/O, UI events)
+        All pending microtasks drain completely before the next macrotask runs.
+
+        WHAT IS A "THENABLE"?
+
+        A thenable is just any object (or function) that happens to have a
+        .then(onFulfilled, onRejected) method - it doesn't need to be an
+        actual Promise instance. A plain object like
+        { then(cb) { cb(42); } } counts. This is a deliberate, duck-typed
+        interop hook in the spec: it's how native Promises, MyPromise
+        instances, and any other Promise-like library (jQuery deferreds,
+        old Bluebird promises, etc.) can all be awaited/chained
+        interchangeably, without needing to share a class hierarchy.
+
+        HOW IT'S HANDLED:
+
+        Whenever a promise is about to be resolved with a value, the engine
+        checks "is this value thenable?" (does it have a callable .then?).
+          - If NOT thenable -> resolve normally, fulfill with that value.
+          - If thenable -> DON'T fulfill with the thenable itself. Instead,
+            call its .then(onFulfilled, onRejected) and "lock on" to it:
+            wait for it to call onFulfilled/onRejected, and adopt whatever
+            state/value IT eventually produces. If that value is ALSO
+            thenable, repeat (recursive unwrapping) until a plain value
+            falls out.
+        This check happens in exactly two places: when a promise's own
+        resolve() is called with a thenable, and when a .then() handler
+        RETURNS a thenable. Both funnel through the same resolution logic
+        (Part 5, #resolveWithThenable below). `await` uses this same
+        mechanism, which is why `await thenable` works even for plain
+        objects, not just real Promises.
+      */
+
+      // ============================================================
+      // PART 1 - States, executor, resolve/reject
+      // ============================================================
+
+      const STATE = {
+        PENDING: "pending",
+        FULFILLED: "fulfilled",
+        REJECTED: "rejected",
+      };
+
+      // Module-level helper (not a class member) so it can be a plain
+      // function instead of a private static METHOD - this parser only
+      // supports private FIELDS on classes, not private methods.
+      const isThenable = (value) =>
+        value !== null &&
+        (typeof value === "object" || typeof value === "function") &&
+        typeof value.then === "function";
+
+      class MyPromise {
+        #state = STATE.PENDING;
+        #value; // fulfillment value OR rejection reason, once settled
+
+        // Every .then() call registers a callback pair here. We need a LIST
+        // (not a single slot) because .then() can be called multiple times
+        // on the same promise (see Part 2), and if the promise is still
+        // pending when that happens, we must remember all of them.
+        #callbacks = [];
+
+        constructor(executor) {
+          // The executor runs SYNCHRONOUSLY, immediately, inside the constructor.
+          // This mirrors native behavior: `new Promise(fn)` runs `fn` right away.
+          try {
+            executor(this.#resolve, this.#reject);
+          } catch (err) {
+            // If the executor throws synchronously, that's equivalent to
+            // calling reject(err).
+            this.#reject(err);
+          }
+        }
+
+        // Arrow-function class fields so `this` stays bound when these are
+        // passed around as bare `resolve`/`reject` references (which is
+        // exactly how the executor receives and calls them). Private
+        // METHODS (`#settle() {}`) aren't supported by this parser, so
+        // every "method" here is a field holding an arrow function instead.
+        #resolve = (value) => {
+          this.#settle(STATE.FULFILLED, value);
+        };
+
+        #reject = (reason) => {
+          this.#settle(STATE.REJECTED, reason);
+        };
+
+        #settle = (state, value) => {
+          // A promise can only settle ONCE. Calling resolve/reject again
+          // after that (or calling both) is a silent no-op - this is what
+          // guarantees a promise's outcome never changes.
+          if (this.#state !== STATE.PENDING) return;
+
+          // PART 5 preview: resolving with a thenable/promise must adopt
+          // its eventual state instead of fulfilling with the thenable
+          // itself. See #resolveWithThenable below.
+          if (state === STATE.FULFILLED && isThenable(value)) {
+            this.#resolveWithThenable(value);
+            return;
+          }
+
+          this.#state = state;
+          this.#value = value;
+
+          // Fire every callback that was registered while we were pending.
+          this.#callbacks.forEach((cb) => this.#scheduleCallback(cb));
+          this.#callbacks = [];
+        };
+
+        // ============================================================
+        // PART 3 - Microtask queue
+        // ============================================================
+
+        #scheduleCallback = (callback) => {
+          // THIS is the single most important line for "why are promises
+          // always async": even though `this.#state` is already settled
+          // and we could call the handler right now, we defer it with
+          // queueMicrotask. That guarantees .then() callbacks NEVER run
+          // synchronously, whether the promise settled before or after
+          // .then() was called - consistent, predictable ordering.
+          queueMicrotask(() => {
+            const { onFulfilled, onRejected, resolveNext, rejectNext } = callback;
+            const isFulfilled = this.#state === STATE.FULFILLED;
+            const handler = isFulfilled ? onFulfilled : onRejected;
+
+            // PART 4 - "no matching handler" pass-through: if .then() was
+            // called without an onRejected (or vice versa), forward the
+            // current state/value untouched to the next promise in the chain.
+            if (typeof handler !== "function") {
+              isFulfilled ? resolveNext(this.#value) : rejectNext(this.#value);
+              return;
+            }
+
+            try {
+              // Whatever the handler returns becomes the fulfillment value
+              // of the NEXT promise (the one .then() returned). If it
+              // returns a thenable, resolveNext will detect that and adopt
+              // its state (Part 5).
+              const result = handler(this.#value);
+              resolveNext(result);
+            } catch (err) {
+              // A throw inside a handler rejects the NEXT promise, not this one.
+              rejectNext(err);
+            }
+          });
+        };
+
+        // ============================================================
+        // PART 2 - Multiple .then() callbacks
+        // PART 4 - Chaining
+        // ============================================================
+
+        then(onFulfilled, onRejected) {
+          // .then() always returns a BRAND NEW promise. That new promise's
+          // resolve/reject become "resolveNext"/"rejectNext" for whichever
+          // handler ends up running above.
+          return new MyPromise((resolveNext, rejectNext) => {
+            const callback = { onFulfilled, onRejected, resolveNext, rejectNext };
+
+            if (this.#state === STATE.PENDING) {
+              // Not settled yet - stash the pair, #settle() will run it later.
+              this.#callbacks.push(callback);
+            } else {
+              // Already settled (e.g. .then() called after the fact, or a
+              // second .then() on the same promise) - still goes through
+              // the microtask queue, never synchronously.
+              this.#scheduleCallback(callback);
+            }
+          });
+        }
+
+        // ============================================================
+        // PART 6 - catch()
+        // ============================================================
+
+        catch(onRejected) {
+          // catch(fn) is just sugar for then(undefined, fn).
+          return this.then(undefined, onRejected);
+        }
+
+        // ============================================================
+        // PART 7 - finally()
+        // ============================================================
+
+        finally(onFinally) {
+          return this.then(
+            (value) => {
+              // finally's callback receives no arguments and its return
+              // value is ignored UNLESS it throws or returns a rejected
+              // promise/thenable - then that overrides the outcome.
+              // Returning `onFinally?.()` from inside then() lets Part 5's
+              // resolution procedure adopt a thrown/returned rejection.
+              return MyPromise.resolve(onFinally?.()).then(() => value);
+            },
+            (reason) => {
+              return MyPromise.resolve(onFinally?.()).then(() => {
+                throw reason;
+              });
+            }
+          );
+        }
+
+        // ============================================================
+        // PART 5 - Promise Resolution Procedure (Promises/A+ "[[Resolve]]")
+        // ============================================================
+
+        // Implements the Promises/A+ "2.3 Promise Resolution Procedure".
+        // Called whenever we're about to resolve THIS promise with a value
+        // that turns out to be thenable (another MyPromise, a native
+        // Promise, or any plain object with a .then method).
+        #resolveWithThenable = (thenable) => {
+          // Self-resolution protection: if a promise's own resolver is
+          // handed the promise itself as the resolution value, that's a
+          // circular reference (it can never settle) - reject with a
+          // TypeError, exactly like native Promise does.
+          if (thenable === this) {
+            this.#reject(new TypeError("Chaining cycle detected: promise resolved with itself"));
+            return;
+          }
+
+          // "called" guards against a misbehaving/malicious thenable that
+          // invokes both resolve AND reject, or invokes one of them twice -
+          // per spec, only the FIRST call counts.
+          let called = false;
+
+          try {
+            thenable.then(
+              (value) => {
+                if (called) return;
+                called = true;
+                // Recursive unwrapping: the value we were just handed might
+                // ITSELF be thenable (a promise resolved with a promise
+                // resolved with a promise...). Recursing through #resolve
+                // (which re-runs this same procedure) flattens the whole
+                // chain down to a single non-thenable value or a rejection.
+                this.#resolve(value);
+              },
+              (reason) => {
+                if (called) return;
+                called = true;
+                this.#reject(reason);
+              }
+            );
+          } catch (err) {
+            // Edge case: accessing `.then` or calling it throws synchronously.
+            if (called) return;
+            called = true;
+            this.#reject(err);
+          }
+        };
+
+        // ------------------------------------------------------------
+        // Static helpers (mirroring Promise.resolve / Promise.reject)
+        // ------------------------------------------------------------
+
+        static resolve(value) {
+          if (value instanceof MyPromise) return value;
+          return new MyPromise((resolve) => resolve(value));
+        }
+
+        static reject(reason) {
+          return new MyPromise((_, reject) => reject(reason));
+        }
+      }
+
+      // ============================================================
+      // Demo / sanity checks
+      // ============================================================
+
+      // Basic fulfillment + chaining with a returned plain value.
+      new MyPromise((resolve) => resolve(1))
+        .then((v) => v + 1)
+        .then((v) => console.log("basic chain:", v)); // 2
+
+      // Returning a thenable from a handler - the outer chain "flattens"
+      // and waits for the inner one (Part 4 + Part 5 recursive unwrapping).
+      new MyPromise((resolve) => resolve("start"))
+        .then(() => new MyPromise((res) => setTimeout(() => res("inner"), 20)))
+        .then((v) => console.log("flattened thenable:", v)); // 'inner'
+
+      // Multiple independent .then() calls on the same promise (Part 2) -
+      // both subscribers fire, each gets its own derived promise.
+      const shared = new MyPromise((resolve) => resolve("shared"));
+      shared.then((v) => console.log("subscriber A:", v));
+      shared.then((v) => console.log("subscriber B:", v));
+
+      // Error thrown in a handler rejects the next link; caught by catch().
+      new MyPromise((resolve) => resolve())
+        .then(() => {
+          throw new Error("boom");
+        })
+        .catch((err) => console.log("caught:", err.message)); // 'boom'
+
+      // finally() always runs, never sees/changes the value.
+      new MyPromise((resolve) => resolve(42))
+        .finally(() => console.log("cleanup ran"))
+        .then((v) => console.log("value survives finally:", v)); // 42
+
+      // Proof it's truly async: sync log always wins over the microtask.
+      new MyPromise((resolve) => resolve()).then(() =>
+        console.log("microtask (runs after sync code)")
+      );
+      console.log("synchronous code runs first");
     },
   },
 ];
