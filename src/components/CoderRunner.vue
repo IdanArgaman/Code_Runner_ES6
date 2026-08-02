@@ -35,8 +35,9 @@
 </template>
 
 <script>
-// import codeItems from "../assets/code.js";
 import _ from "lodash";
+
+const codeModules = import.meta.glob("../assets/*.js");
 
 export default {
   name: "CodeRunner",
@@ -87,7 +88,8 @@ export default {
     },
     async loadCodeBase(codeBase) {
       try {
-        this.codeItems = (await import(`../assets/${codeBase}`)).default;
+        const loader = codeModules[`../assets/${codeBase}.js`];
+        this.codeItems = (await loader()).default;
       } catch (e) {
         this.codeItems = [];
       }

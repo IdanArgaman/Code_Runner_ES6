@@ -14,7 +14,7 @@ export default [{
                 const a = 2;
                 console.log(a);
                 try {
-                    a = 3; // ❌
+                    eval("a = 3;"); // ❌
                 } catch (e) {
                     console.log(e);
                 }
@@ -26,7 +26,7 @@ export default [{
                 console.log(b); // [1,2,3,4]
 
                 try {
-                    b = []; // ❌
+                    eval("b = [];"); // ❌
                 } catch (e) {
                     console.log(e);
                 }

@@ -24,10 +24,10 @@ export default {
     };
   },
   mounted() {
-    this.files = require
-      .context("./assets/", true, /\.js$/)
-      .keys()
-      .map((file) => file.substring(2).substring(0, file.length - 5));
+    const modules = import.meta.glob("./assets/*.js");
+    this.files = Object.keys(modules).map((file) =>
+      file.substring("./assets/".length, file.length - ".js".length)
+    );
   },
 };
 </script>
